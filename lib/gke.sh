@@ -34,11 +34,30 @@ function gke::create-cluster {
 
 function gke::destroy {
   log-lifecycle "Destroying cluster ${K8S_CLUSTER_NAME}"
-  if command -v gcloud &>/dev/null; then
-    gcloud -q container clusters delete "${K8S_CLUSTER_NAME}" --no-wait
-  else
+
+  local timeout_secs=30
+  local increment_secs=5
+  local waited_time=0
+
+  if ! command -v gcloud &>/dev/null; then
     rerun_log error "gcloud executable not found in PATH. Could not destroy ${K8S_CLUSTER_NAME}"
+    return 1
   fi
+
+  while ! gcloud -q container clusters delete "${K8S_CLUSTER_NAME}" --no-wait; do
+    sleep ${increment_secs}
+    (( waited_time += ${increment_secs} ))
+
+    if [ ${waited_time} -ge ${timeout_secs} ]; then
+      log-warn "Google Cloud couldn't destroy ${K8S_CLUSTER_NAME} properly. :-("
+      echo
+      return 1
+    fi
+
+    echo -n . 1>&2
+  done
+
+  log-lifecycle "Successfully destroyed ${K8S_CLUSTER_NAME}"
 }
 
 function gke::setup {
